@@ -93,6 +93,8 @@ ${YELLOW}Full-stack commands:${NC}
 ${YELLOW}Backend-only shortcuts:${NC}
   ${GREEN}backend${NC} <args>  Pass-through to docker/scripts/deploy.sh (e.g. "backend rebuild agent")
   ${GREEN}infra${NC}           Start infrastructure only (PostgreSQL, Redis, RabbitMQ, MinIO)
+  ${GREEN}db migrate${NC}      Apply unapplied init-db SQL migrations to existing DB (non-destructive)
+  ${GREEN}db reset${NC}        Drop and reinitialize the database (DESTRUCTIVE)
 
 ${YELLOW}Frontend-only commands:${NC}
   ${GREEN}web build${NC}       Build the Docker image for the web frontend
@@ -222,6 +224,19 @@ main() {
         clean)    bash "$DEPLOY_SH" clean ;;
         infra)    bash "$DEPLOY_SH" infra ;;
         backend)  bash "$DEPLOY_SH" "$@" ;;
+        db)
+            local sub="${1:-}"; shift || true
+            case "$sub" in
+                migrate)    bash "$DEPLOY_SH" db-migrate "$@" ;;
+                reset)      bash "$DEPLOY_SH" reset-db "$@" ;;
+                ""|-h|--help)
+                    echo "Usage: $0 db <migrate|reset>"
+                    echo "  migrate  Apply unapplied init-db migrations to existing DB (non-destructive)"
+                    echo "  reset    Drop and reinitialize the database (DESTRUCTIVE)"
+                    ;;
+                *) log_error "Unknown db subcommand: $sub"; exit 1 ;;
+            esac
+            ;;
         web)
             local sub="${1:-}"; shift || true
             case "$sub" in

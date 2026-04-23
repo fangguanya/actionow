@@ -63,11 +63,23 @@ export function RegisterForm({ initialInviteCode, returnUrl }: RegisterFormProps
   const registrationConfig = loginConfig ? {
     invitationCodeRequired: loginConfig.invitationCodeRequired,
     allowUserCode: loginConfig.allowUserCode,
+    emailRequired: loginConfig.emailRequired,
   } : null;
+  const emailRequired = registrationConfig?.emailRequired ?? false;
+  const skipEmailStep = loginConfig !== null && !emailRequired;
   const oauthProviders = loginConfig?.oauthProviders ?? [];
   const hasOAuth = oauthProviders.length > 0;
 
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2>(
+    loginConfig != null && !(loginConfig.emailRequired ?? false) ? 2 : 1,
+  );
+
+  // When config loads later and indicates email is not required, skip straight to account-setup step
+  useEffect(() => {
+    if (skipEmailStep && step === 1) {
+      setStep(2);
+    }
+  }, [skipEmailStep, step]);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -184,22 +196,21 @@ export function RegisterForm({ initialInviteCode, returnUrl }: RegisterFormProps
 
   const validateStep1 = () => {
     const newErrors: Record<string, string> = {};
+    const emailProvided = !!formData.email;
 
-    // Email validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = tErrors("invalidEmail");
-    }
+    if (emailRequired || emailProvided) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        newErrors.email = tErrors("invalidEmail");
+      } else if (isCheckingEmail) {
+        newErrors.email = tErrors("checkingEmail");
+      } else if (emailAvailable === false) {
+        newErrors.email = tErrors("emailTaken");
+      }
 
-    // Email availability
-    if (isCheckingEmail) {
-      newErrors.email = tErrors("checkingEmail");
-    } else if (emailAvailable === false) {
-      newErrors.email = tErrors("emailTaken");
-    }
-
-    // Verify code
-    if (!/^\d{6}$/.test(formData.verifyCode)) {
-      newErrors.verifyCode = tErrors("invalidVerifyCode");
+      // Verify code only required when email is in play
+      if (!/^\d{6}$/.test(formData.verifyCode)) {
+        newErrors.verifyCode = tErrors("invalidVerifyCode");
+      }
     }
 
     // Invite code required check
@@ -242,6 +253,11 @@ export function RegisterForm({ initialInviteCode, returnUrl }: RegisterFormProps
     // Agreement
     if (!agreement) {
       newErrors.agreement = tErrors("agreementRequired");
+    }
+
+    // When email step is skipped, invite code validation moves here
+    if (skipEmailStep && registrationConfig?.invitationCodeRequired && !formData.inviteCode) {
+      newErrors.inviteCode = tErrors("inviteCodeRequired");
     }
 
     setErrors(newErrors);
@@ -319,10 +335,10 @@ export function RegisterForm({ initialInviteCode, returnUrl }: RegisterFormProps
     try {
       const response = await authService.register({
         username: formData.username,
-        email: formData.email,
+        email: formData.email || undefined,
         password: formData.password,
         nickname: formData.nickname || undefined,
-        verifyCode: formData.verifyCode,
+        verifyCode: formData.verifyCode || undefined,
         inviteCode: formData.inviteCode || undefined,
       });
 
@@ -346,6 +362,7 @@ export function RegisterForm({ initialInviteCode, returnUrl }: RegisterFormProps
       </div>
 
       {/* Step Indicator */}
+      {!skipEmailStep && (
       <div className="flex items-center justify-center gap-2">
         <div className="flex flex-col items-center gap-1">
           <div
@@ -377,14 +394,20 @@ export function RegisterForm({ initialInviteCode, returnUrl }: RegisterFormProps
           </span>
         </div>
       </div>
+      )}
 
       {/* Register Form */}
       <Form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {step === 1 ? (
           <>
             {/* Email */}
-            <TextField name="email" type="email" isRequired isInvalid={!!errors.email} className="w-full">
-              <Label>{t("email")}</Label>
+            <TextField name="email" type="email" isRequired={emailRequired} isInvalid={!!errors.email} className="w-full">
+              <Label>
+                {t("email")}{" "}
+                {!emailRequired && (
+                  <span className="text-xs text-muted">({t("inviteCodeOptional")})</span>
+                )}
+              </Label>
               <div className="relative w-full">
                 <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
                 <Input
@@ -618,6 +641,44 @@ export function RegisterForm({ initialInviteCode, returnUrl }: RegisterFormProps
               </div>
             </TextField>
 
+            {/* Invite Code (rendered here when email step is skipped) */}
+            {skipEmailStep && (
+              <TextField
+                name="inviteCode"
+                isRequired={registrationConfig?.invitationCodeRequired}
+                isInvalid={!!errors.inviteCode}
+                className="w-full"
+              >
+                <Label>
+                  {t("inviteCode")}{" "}
+                  {!registrationConfig?.invitationCodeRequired && (
+                    <span className="text-xs text-muted">({t("inviteCodeOptional")})</span>
+                  )}
+                </Label>
+                <div className="relative w-full">
+                  <Ticket className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+                  <Input
+                    placeholder={t("inviteCodePlaceholder")}
+                    value={formData.inviteCode}
+                    onChange={(e) => updateField("inviteCode", e.target.value)}
+                    className="w-full pl-10 pr-10"
+                  />
+                  {formData.inviteCode && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {isValidatingInviteCode ? (
+                        <div className="size-4 animate-spin rounded-full border-2 border-muted border-t-transparent" />
+                      ) : inviteCodeValid === true ? (
+                        <CheckCircle className="size-4 text-success" />
+                      ) : inviteCodeValid === false ? (
+                        <XCircle className="size-4 text-danger" />
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+                {errors.inviteCode && <FieldError>{errors.inviteCode}</FieldError>}
+              </TextField>
+            )}
+
             {/* Agreement */}
             <div className="flex flex-col gap-1">
               <div className="flex items-start gap-2">
@@ -649,19 +710,21 @@ export function RegisterForm({ initialInviteCode, returnUrl }: RegisterFormProps
 
             {/* Buttons */}
             <div className="mt-auto flex gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onPress={handlePrevStep}
-                className="h-11 flex-1 text-base font-semibold"
-              >
-                <ArrowLeft className="mr-1 size-4" />
-                {t("prevStep")}
-              </Button>
+              {!skipEmailStep && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onPress={handlePrevStep}
+                  className="h-11 flex-1 text-base font-semibold"
+                >
+                  <ArrowLeft className="mr-1 size-4" />
+                  {t("prevStep")}
+                </Button>
+              )}
               <Button
                 type="submit"
                 isPending={isLoading}
-                className="button--accent h-11 flex-1 text-base font-semibold"
+                className={`button--accent h-11 text-base font-semibold ${skipEmailStep ? "w-full" : "flex-1"}`}
               >
                 {({isPending}) => (<>{isPending ? <Spinner color="current" size="sm" /> : null}{t("submit")}</>)}
               </Button>

@@ -299,6 +299,7 @@ public class OAuthServiceImpl implements OAuthService {
                 .codeLoginEnabled(runtimeConfig.isCodeLoginEnabled())
                 .invitationCodeRequired(invitationCodeService.isInvitationCodeRequired())
                 .allowUserCode(invitationCodeService.isUserCodeAllowed())
+                .emailRequired(runtimeConfig.isRegistrationEmailRequired())
                 .oauthProviders(providers)
                 .build();
     }

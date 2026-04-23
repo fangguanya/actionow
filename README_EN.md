@@ -246,6 +246,17 @@ Endpoints:
 | API gateway   | http://localhost:8080/doc.html       |
 | Agent Swagger | http://localhost:8091/swagger-ui.html|
 
+**Default seeded accounts** (from `docker/init-db/02-system-seed.sql`):
+
+| Username   | Password        | Role              |
+|------------|-----------------|-------------------|
+| `actionow` | `actionow2026!` | Tenant creator    |
+| `admin`    | `actionow2026!` | Tenant admin      |
+| `user1`    | `actionow2026!` | Regular user      |
+| `user2`    | `actionow2026!` | Regular user      |
+
+> ⚠️ Change these default passwords immediately after first login in any production deployment.
+
 > Local development, deployment modes, and command reference: [docs/development.en.md](docs/development.en.md).
 
 ---

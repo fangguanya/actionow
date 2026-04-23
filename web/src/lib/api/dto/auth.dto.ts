@@ -63,7 +63,7 @@ export interface RegisterRequestDTO {
   phone?: string;
   password: string;
   nickname?: string;
-  verifyCode: string;
+  verifyCode?: string;
   inviteCode?: string;
 }
 

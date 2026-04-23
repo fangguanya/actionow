@@ -253,3 +253,123 @@ EOSQL
     echo
     log_info "Run '$0 up' to start application services."
 }
+
+# =====================================================
+# db migrate Command
+# Apply any docker/init-db/*.sql files not yet recorded in
+# t_migration_history against an EXISTING database (non-destructive).
+# =====================================================
+
+cmd_db_migrate() {
+    check_docker
+    check_env
+
+    local db_host db_port db_name db_user db_password admin_db
+    db_host=$(_env_get DB_HOST 127.0.0.1)
+    db_port=$(_env_get DB_PORT 5432)
+    db_name=$(_env_get DB_NAME actionow)
+    db_user=$(_env_get DB_USER actionow)
+    db_password=$(_env_get DB_PASSWORD "")
+    admin_db=$(_env_get DB_ADMIN_DB postgres)
+
+    if [ -z "$db_password" ]; then
+        log_error "DB_PASSWORD is empty in $ENV_FILE"
+        exit 1
+    fi
+
+    local init_dir="$DOCKER_DIR/init-db"
+    if [ ! -d "$init_dir" ]; then
+        log_error "Init dir not found: $init_dir"
+        exit 1
+    fi
+
+    # In docker-infra modes, run inside postgres container (simpler, no client needed).
+    # In apps mode (external DB), fall back to run_psql helper.
+    local use_container="no"
+    if mode_supports_docker_infra && docker ps --format '{{.Names}}' | grep -q '^actionow-postgres$'; then
+        use_container="yes"
+    fi
+
+    log_step "Running migrations against $db_name (mode: $(if [ "$use_container" = "yes" ]; then echo container; else echo external; fi))"
+
+    # Ensure tracking table exists
+    local create_table_sql="CREATE TABLE IF NOT EXISTS t_migration_history (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL UNIQUE,
+        checksum VARCHAR(64),
+        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        execution_time_ms INTEGER,
+        success BOOLEAN DEFAULT TRUE
+    );"
+
+    _migrate_psql_exec() {
+        # $1 = sql string OR -f <file>
+        if [ "$use_container" = "yes" ]; then
+            if [ "$1" = "-f" ]; then
+                docker exec -i actionow-postgres psql -v ON_ERROR_STOP=1 -U "$db_user" -d "$db_name" < "$2"
+            else
+                docker exec -i actionow-postgres psql -v ON_ERROR_STOP=1 -U "$db_user" -d "$db_name" -c "$1"
+            fi
+        else
+            export PGPASSWORD="$db_password" PGHOST="$db_host" PGPORT="$db_port" POSTGRES_USER="$db_user"
+            if [ "$1" = "-f" ]; then
+                run_psql "$db_name" -v ON_ERROR_STOP=1 -f "$2"
+            else
+                run_psql "$db_name" -v ON_ERROR_STOP=1 -c "$1"
+            fi
+        fi
+    }
+
+    _migrate_psql_query() {
+        # Execute a query, return result on stdout
+        if [ "$use_container" = "yes" ]; then
+            docker exec -i actionow-postgres psql -U "$db_user" -d "$db_name" -t -A -c "$1"
+        else
+            export PGPASSWORD="$db_password" PGHOST="$db_host" PGPORT="$db_port" POSTGRES_USER="$db_user"
+            run_psql "$db_name" -t -A -c "$1"
+        fi
+    }
+
+    _migrate_psql_exec "$create_table_sql" >/dev/null
+
+    local applied=0 skipped=0 failed=0
+    local sql_file filename result
+
+    for sql_file in "$init_dir"/*.sql; do
+        [ -f "$sql_file" ] || continue
+        filename=$(basename "$sql_file")
+
+        result=$(_migrate_psql_query \
+            "SELECT COUNT(*) FROM t_migration_history WHERE filename = '$filename' AND success = TRUE" 2>/dev/null)
+        result=${result//[[:space:]]/}
+
+        if [ "$result" = "1" ]; then
+            echo "[SKIP] $filename (already applied)"
+            ((skipped++)) || true
+            continue
+        fi
+
+        echo "[RUN]  $filename"
+        if _migrate_psql_exec "-f" "$sql_file"; then
+            _migrate_psql_exec \
+                "INSERT INTO t_migration_history (filename, success) VALUES ('$filename', TRUE) ON CONFLICT (filename) DO UPDATE SET success = TRUE, applied_at = CURRENT_TIMESTAMP" \
+                >/dev/null
+            echo "[OK]   $filename"
+            ((applied++)) || true
+        else
+            _migrate_psql_exec \
+                "INSERT INTO t_migration_history (filename, success) VALUES ('$filename', FALSE) ON CONFLICT (filename) DO UPDATE SET success = FALSE, applied_at = CURRENT_TIMESTAMP" \
+                >/dev/null 2>&1 || true
+            echo "[FAIL] $filename"
+            ((failed++)) || true
+        fi
+    done
+
+    echo
+    echo "Summary: applied=$applied skipped=$skipped failed=$failed"
+    if [ "$failed" -gt 0 ]; then
+        log_error "Some migrations failed. Inspect t_migration_history for details."
+        exit 1
+    fi
+    log_success "Migrations up-to-date."
+}

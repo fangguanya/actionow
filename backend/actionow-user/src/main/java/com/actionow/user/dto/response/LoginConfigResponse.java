@@ -40,6 +40,11 @@ public class LoginConfigResponse {
     private Boolean allowUserCode;
 
     /**
+     * 注册时邮箱是否必填
+     */
+    private Boolean emailRequired;
+
+    /**
      * 已启用的 OAuth 提供商列表
      */
     private List<OAuthProviderInfo> oauthProviders;

@@ -239,6 +239,17 @@ cd actionow
 
 启动完成后访问：http://localhost:3000
 
+**默认系统账号**（来自 `docker/init-db/02-system-seed.sql` 种子数据）：
+
+| 用户名     | 密码            | 角色         |
+|------------|-----------------|--------------|
+| `actionow` | `actionow2026!` | 租户创建者   |
+| `admin`    | `actionow2026!` | 租户管理员   |
+| `user1`    | `actionow2026!` | 普通用户     |
+| `user2`    | `actionow2026!` | 普通用户     |
+
+> ⚠️ 生产环境请在首次登录后立即修改上述默认密码。
+
 > 本地开发、部署模式、命令参考见 [docs/development.md](docs/development.md)。
 
 ---

@@ -36,5 +36,6 @@ export interface LoginConfigDTO {
   codeLoginEnabled: boolean;
   invitationCodeRequired: boolean;
   allowUserCode: boolean;
+  emailRequired: boolean;
   oauthProviders: OAuthProviderConfigDTO[];
 }

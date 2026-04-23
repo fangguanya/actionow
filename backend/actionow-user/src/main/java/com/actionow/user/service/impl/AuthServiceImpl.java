@@ -28,6 +28,7 @@ import com.actionow.user.enums.UserStatus;
 import com.actionow.user.enums.VerifyCodeType;
 import com.actionow.user.mapper.AuthSessionMapper;
 import com.actionow.user.mapper.RefreshTokenMapper;
+import com.actionow.user.config.UserRuntimeConfigService;
 import com.actionow.user.service.AuthService;
 import com.actionow.user.service.InvitationCodeService;
 import com.actionow.user.service.UserMailHelper;
@@ -72,6 +73,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserService userService;
     private final VerifyCodeService verifyCodeService;
     private final InvitationCodeService invitationCodeService;
+    private final UserRuntimeConfigService userRuntimeConfigService;
     private final UserMailHelper userMailHelper;
     private final JwtUtils jwtUtils;
     private final JwtProperties jwtProperties;
@@ -102,16 +104,20 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LoginResponse register(RegisterRequest request) {
-        // 验证邮箱或手机号至少填写一个
-        if ((request.getEmail() == null || request.getEmail().isEmpty())
-                && (request.getPhone() == null || request.getPhone().isEmpty())) {
-            throw new BusinessException(ResultCode.PARAM_INVALID, "邮箱或手机号至少填写一个");
+        boolean emailMissing = request.getEmail() == null || request.getEmail().isEmpty();
+        boolean phoneMissing = request.getPhone() == null || request.getPhone().isEmpty();
+
+        // 动态配置：邮箱是否必填
+        if (emailMissing && userRuntimeConfigService.isRegistrationEmailRequired()) {
+            throw new BusinessException(ResultCode.PARAM_INVALID, "邮箱为必填项");
         }
 
-        // 验证验证码
-        if (!verifyCodeService.validateAndDeleteVerifyCode(
-                request.getTarget(), VerifyCodeType.REGISTER, request.getVerifyCode())) {
-            throw new BusinessException(ResultCode.VERIFY_CODE_ERROR);
+        // 有邮箱或手机时必须通过验证码校验；都无则跳过
+        if (!emailMissing || !phoneMissing) {
+            if (!verifyCodeService.validateAndDeleteVerifyCode(
+                    request.getTarget(), VerifyCodeType.REGISTER, request.getVerifyCode())) {
+                throw new BusinessException(ResultCode.VERIFY_CODE_ERROR);
+            }
         }
 
         // 邀请码验证

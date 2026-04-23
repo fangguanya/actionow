@@ -1,13 +1,11 @@
 {
   "vhosts": [
-    {
-      "name": "/"
-    }
+    { "name": "/" }
   ],
   "users": [
     {
       "name": "actionow",
-      "password_hash": "h40SqZfSHAhAOLamPzuhA5gvkwvLTztGKSU1nzR0pz6M9Ild",
+      "password_hash": "REPLACE_WITH_GENERATED_HASH",
       "hashing_algorithm": "rabbit_password_hashing_sha256",
       "tags": ["administrator"]
     }

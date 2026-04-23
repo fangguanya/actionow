@@ -56,6 +56,11 @@ docker/*.env.bak
 docker/.env.*.bak
 docker/.env.*.bak.*
 
+# RabbitMQ definitions.json is generated at init time with a password hash
+# derived from RABBITMQ_PASSWORD (see docker/scripts/_init.sh).
+docker/init-rabbitmq/definitions.json
+!docker/init-rabbitmq/definitions.json.example
+
 # ============================================
 # SSL/TLS Certificates & Keys
 # ============================================

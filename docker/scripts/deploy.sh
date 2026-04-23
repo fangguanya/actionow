@@ -35,6 +35,7 @@ ${YELLOW}Commands:${NC}
   ${GREEN}exec${NC} <service>           Open shell in service container
   ${GREEN}health${NC}                   Check health of all services
   ${GREEN}reset-db${NC}                 Reset database (drop all data and reinitialize)
+  ${GREEN}db-migrate${NC}               Apply any unapplied init-db migrations (non-destructive)
   ${GREEN}clean${NC}                    Remove all containers and volumes
 
 ${YELLOW}Available Services:${NC}
@@ -336,6 +337,7 @@ main() {
         exec)        cmd_exec "$@" ;;
         health)      cmd_health "$@" ;;
         reset-db)    cmd_reset_db "$@" ;;
+        db-migrate)  cmd_db_migrate "$@" ;;
         clean)       cmd_clean "$@" ;;
         help|--help|-h|"")
             show_help ;;

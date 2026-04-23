@@ -28,6 +28,10 @@ public class UserRuntimeConfigService extends RuntimeConfigService {
     public static final String PASSWORD_LOGIN_ENABLED = "auth.login.password_enabled";
     public static final String CODE_LOGIN_ENABLED     = "auth.login.code_enabled";
 
+    // ==================== 注册配置 ====================
+
+    public static final String REGISTRATION_EMAIL_REQUIRED = "registration.email_required";
+
     // ==================== OAuth 配置键模板 ====================
 
     private static final String OAUTH_PREFIX = "oauth.";
@@ -62,6 +66,9 @@ public class UserRuntimeConfigService extends RuntimeConfigService {
         // 登录方式开关
         defaults.put(PASSWORD_LOGIN_ENABLED, "true");
         defaults.put(CODE_LOGIN_ENABLED, "true");
+
+        // 注册配置：邮箱是否必填（默认非必填）
+        defaults.put(REGISTRATION_EMAIL_REQUIRED, "false");
 
         // 为每个 provider 注册默认值
         registerProviderDefaults(defaults, "github", true,
@@ -126,6 +133,10 @@ public class UserRuntimeConfigService extends RuntimeConfigService {
 
     public boolean isCodeLoginEnabled() {
         return getBoolean(CODE_LOGIN_ENABLED);
+    }
+
+    public boolean isRegistrationEmailRequired() {
+        return getBoolean(REGISTRATION_EMAIL_REQUIRED);
     }
 
     /**
