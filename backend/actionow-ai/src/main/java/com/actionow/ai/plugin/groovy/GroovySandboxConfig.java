@@ -50,7 +50,10 @@ public class GroovySandboxConfig {
             // 资产处理绑定
             "com.actionow.ai.plugin.groovy.binding.AssetBinding",
             // LLM 调用绑定
-            "com.actionow.ai.plugin.groovy.binding.LlmBinding"
+            "com.actionow.ai.plugin.groovy.binding.LlmBinding",
+            // Provider 脚本辅助类（构建请求体 / 解析响应）
+            "com.actionow.ai.plugin.groovy.binding.RequestHelper",
+            "com.actionow.ai.plugin.groovy.binding.ResponseHelper"
     );
 
     /**
@@ -389,7 +392,17 @@ public class GroovySandboxConfig {
             return true;
         }
         // 检查白名单
-        return allowedReceiverClasses.contains(receiverClass);
+        if (allowedReceiverClasses.contains(receiverClass)) {
+            return true;
+        }
+        // 放行 Throwable 子类的只读方法（脚本普遍使用 catch (Exception e) { e.getMessage() }），
+        // 类型多变（RuntimeException / IllegalArgumentException / ConnectException / MissingPropertyException ...），
+        // 逐一枚举不现实；onMethodCall 已先做方法名黑名单与类名黑名单检查。
+        try {
+            return Throwable.class.isAssignableFrom(Class.forName(receiverClass));
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return false;
+        }
     }
 
     /**
