@@ -437,8 +437,12 @@ public class SaaAgentFactory {
         // Direct project callbacks（Mission 控制工具等不属于任何 Skill 的回调）
         // 必须合并到 staticTools，因为 SAA AgentToolNode.resolve() 只搜索
         // staticTools / configMetadata / toolCallbackResolver，不搜索 dynamicToolCallbacks。
-        // buildDirectProjectCallbacks 已排除 Skill 内的工具，不会产生重复。
+        // 若同一工具同时出现在 Skill 的 groupedToolIds 中（例如 mission_expert Skill
+        // 把 mission_delegate* 也列为技能工具），必须从 groupedTools 中剔除，
+        // 否则 Spring AI ToolCallingChatOptions.validateToolCallbacks 会抛
+        // "Multiple tools with the same name"。
         List<ToolCallback> directCallbacks = buildDirectProjectCallbacks(effectiveAllowedToolIds, groupedTools);
+        removeCallbacksFromGroupedTools(groupedTools, directCallbacks);
         ToolCallback[] staticTools = mergeStaticTools(universalTools, directCallbacks);
 
         FilteredSkillRegistryAdapter filteredRegistry =
@@ -472,6 +476,26 @@ public class SaaAgentFactory {
                         new StatusEmittingHook(streamBridge),
                         modelCallLimitHook)
                 .build();
+    }
+
+    /**
+     * 若 groupedTools 中包含与 direct tool 同名的 callback（例如 mission_expert Skill
+     * 把 mission_delegate* 也列为技能工具），需要在合入 staticTools 之前从 groupedTools 剔除，
+     * 否则 Spring AI 校验工具列表时会抛 "Multiple tools with the same name"。
+     */
+    private void removeCallbacksFromGroupedTools(
+            Map<String, List<ToolCallback>> groupedTools,
+            List<ToolCallback> directCallbacks) {
+        if (groupedTools == null || groupedTools.isEmpty()
+                || directCallbacks == null || directCallbacks.isEmpty()) {
+            return;
+        }
+        Set<String> directNames = directCallbacks.stream()
+                .map(cb -> cb.getToolDefinition().name())
+                .collect(Collectors.toSet());
+        for (List<ToolCallback> skillTools : groupedTools.values()) {
+            skillTools.removeIf(cb -> directNames.contains(cb.getToolDefinition().name()));
+        }
     }
 
     private ToolCallback[] mergeStaticTools(ToolCallback[] universalTools, List<ToolCallback> directCallbacks) {
@@ -519,7 +543,11 @@ public class SaaAgentFactory {
                         log.debug("buildDirectProjectCallbacks: skip {} (null callbackName)", toolId);
                         return;
                     }
-                    if (groupedCallbackNames.contains(callbackName)) {
+                    // 仅当工具不是直接工具（@ChatDirectTool / @MissionDirectTool）且已被 Skill 覆盖时才跳过。
+                    // 直接工具必须出现在 staticTools 中，否则模型首步工具调用会触发
+                    // "No ToolCallback found"（SkillsAgentHook 需 read_skill 后才注入）。
+                    boolean isDirectTool = tool.getDirectToolMode() != null;
+                    if (!isDirectTool && groupedCallbackNames.contains(callbackName)) {
                         return; // skill tool, expected skip
                     }
                     if (!seenNames.add(callbackName)) {
